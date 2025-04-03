@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThreadX - Scalable Thread Manager</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bubblegum+Sans&display=swap');
+        body {
+            font-family: 'Bubblegum Sans', cursive;
+            text-align: center;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
+        }
+        .task-container {
+            margin-top: 20px;
+            max-width: 600px;
+            margin: auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        button {
+            padding: 12px 20px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #fff;
+            transition: all 0.3s ease;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+        .logo {
+            width: 80px;
+            height: auto;
+        }
+        button:nth-child(1) { background: #ff4757; }
+        button:nth-child(2) { background: #ffa502; }
+        button:nth-child(3) { background: #2ed573; }
+        button:nth-child(4) {background: yellow; color: black; }
+        button:nth-child(5) {background: #29c8a2 ; }
+        button:hover {
+            transform: scale(1.1);
+            box-shadow: 0px 4px 8px rgba(255, 255, 255, 0.6);
+            background: #ffffff;
+            color: #000;
+        }
+        .task-log {
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            margin-top: 15px;
+            font-size: 0.95rem;
+        }
+        .task-log p {
+            margin: 5px 0;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            border-left: 4px solid #ffa502;
+        }
+        .credits {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        .image-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .image-container img {
+            width: 150px;
+            height: 150px;
+            border-radius: 10px;
+            object-fit: cover;
+            box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.6);  /* Increased shadow opacity */
+            border: 3px solid #fff;  /* Added white border for contrast */
+            transition: transform 0.3s ease, filter 0.3s ease;
+        }
+
+        .image-container img:hover {
+            transform: scale(1.1);
+            filter: brightness(1.1);  /* Slight brightness boost on hover */
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="logo.png" alt="LPU Logo" class="logo">
+        <h1>ThreadX - Scalable Thread Management</h1>
+    </div>
+    
+    <button onclick="addTask(0)">Add High-Priority Task</button>
+    <button onclick="addTask(1)">Add Medium-Priority Task</button>
+    <button onclick="addTask(2)">Add Low-Priority Task</button>
+    <button onclick="shutdown()">Shutdown Workers</button>
+
+    <div class="task-container">
+        <h3>Task Log:</h3>
+        <div class="task-log" id="taskLog"></div>
+    </div>
+
+    <p class="credits">Developed by Aman Singh, Starin & Nafees</p>
+    <div class="image-container">
+        <img src="image1.jpeg" alt="Image 1">
+        <img src="image3.jpeg" alt="Image 2">
+        <img src="image2.jpeg" alt="Image 3">
+    </div>
+</body>
+    <script>
+        let taskQueue = [];
+        let workers = [];
+        const maxWorkers = 5;
+        const logDiv = document.getElementById("taskLog");
+
+        function logMessage(message, priority = "normal") {
+            let colors = ["#ff4757", "#ffa502", "#2ed573"];
+            let priorityColor = priority !== "normal" ? colors[priority] : "#fff";
+            logDiv.innerHTML += `<p style='border-left-color: ${priorityColor}'>${new Date().toLocaleTimeString()} - ${message}</p>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        for (let i = 0; i < maxWorkers; i++) {
+            let worker = new Worker(URL.createObjectURL(new Blob([`
+                self.onmessage = function(event) {
+                    let { taskId, priority } = event.data;
+                    let executionTime = [1000, 2000, 3000][priority];
+                    setTimeout(() => {
+                        self.postMessage({ taskId });
+                        self.busy = false;
+                    }, executionTime);
+                };
+            `], { type: 'application/javascript' })));
+
+            worker.onmessage = function(event) {
+                logMessage(`Task ${event.data.taskId} completed.`, 1);
+                taskQueue.shift();
+                processQueue();
+            };
+            workers.push(worker);
+        }
+
+        function addTask(priority) {
+            let taskId = Date.now();
+            taskQueue.push({ taskId, priority });
+            taskQueue.sort((a, b) => a.priority - b.priority);
+            logMessage(`Task ${taskId} added with priority ${priority}.`, priority);
+            processQueue();
+        }
+
+        function processQueue() {
+            if (taskQueue.length > 0) {
+                let availableWorker = workers.find(w => !w.busy);
+                if (availableWorker) {
+                    let task = taskQueue[0];
+                    availableWorker.busy = true;
+                    availableWorker.postMessage(task);
+                }
+            }
+        }
+
+        function shutdown() {
+            workers.forEach(worker => worker.terminate());
+            logMessage("All workers shut down.", 0);
+        }
+    </script>
+</body>
+</html>
